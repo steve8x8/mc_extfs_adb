@@ -1,0 +1,15 @@
+#!/bin/sh
+# Browse output of an extfs module with mc.
+# Usage: cd FILE#extfs
+
+COMMAND="$1"
+case "$COMMAND" in
+# Command: list
+  list)
+    exec cat "$2"
+  ;;
+
+  *)
+    exit 1
+  ;;
+esac

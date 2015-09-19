@@ -21,8 +21,10 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 
-UPLOAD_BUSYBOX="${UPLOAD_BUSYBOX:-yes}"
-if [ "$UPLOAD_BUSYBOX" == "yes" ]
+
+# Better have busybox installed using BusyboxInstaller app.
+UPLOAD_BUSYBOX="${UPLOAD_BUSYBOX:-no}"
+if [ "$UPLOAD_BUSYBOX" = "yes" ]
 then
 #  BUSYBOX="${BUSYBOX:-/sqlite_stmt_journals/busybox}"
   BUSYBOX="${BUSYBOX:-/data/local/busybox}"

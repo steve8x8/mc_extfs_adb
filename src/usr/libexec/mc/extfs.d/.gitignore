@@ -1,0 +1,8 @@
+*.ORIG
+*.NEW
+*.201?????
+*.sh
+*.diff
+*.patch
+patch*
+tests/

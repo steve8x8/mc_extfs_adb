@@ -1,0 +1,374 @@
+#!/bin/bash
+#
+#  Midnight Commander compatible EXTFS for accessing Android devices over adb
+#
+#  Writen by Volodymyr M. Lisivka <vlisivka@gmail.com> 2011
+#
+#  This file is part of the Midnight Commander.
+#
+#  The Midnight Commander is free software; you can redistribute it
+#  and/or modify it under the terms of the GNU General Public License as
+#  published by the Free Software Foundation; either version 2 of the
+#  License, or (at your option) any later version.
+#
+#  The Midnight Commander is distributed in the hope that it will be
+#  useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+#  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
+
+
+# Modifications by steve8x8@googlemail.com, 2014--2015
+# Prerequisites: busybox on mobile
+# Use bash instead of sh (Debian has sh=dash),
+# at least "read -a" is a bashism...
+# Time stamps now correct to the second
+
+# the following environment variables may be defined:
+# $DEBUG
+# $UPLOAD_BUSYBOX (requires the armv5 busybox in install directory)
+#  $BUSYBOX (path to put busybox on device)
+# $ADB
+
+# Known bugs:
+# - unable to set timestamp after write (mc doesn't provide one)
+# - no mapping of UIDs and GIDs (unknown ones get set to current user's)
+# - unreadable directories are shown as empty (or not at all)
+# - no automatic detection whether "su" has to be used
+
+# provide some debugging output
+# (1=only errors, 2=also file list, 3: original ls output)
+DEBUG=${DEBUG:-0}
+ DEBUG=1
+if [ $DEBUG -ge 1 ]
+then
+  ERR=/tmp/`basename $0`.err
+else
+  ERR=/dev/null
+fi
+if [ $DEBUG -ge 2 ]
+then
+  OUT=/tmp/`basename $0`.out
+else
+  OUT=/dev/null
+fi
+if [ $DEBUG -ge 3 ]
+then
+  DBG=/tmp/`basename $0`.dbg
+else
+  DBG=/dev/null
+fi
+errprint() {
+  [ $DEBUG -ne 0 ] && \
+  echo `date +%Y%m%d-%H%M%S:` $@ >> $ERR
+}
+
+
+# Better have busybox installed using BusyboxInstaller app.
+UPLOAD_BUSYBOX="${UPLOAD_BUSYBOX:-no}"
+if [ "$UPLOAD_BUSYBOX" = "yes" ]
+then
+#  BUSYBOX="${BUSYBOX:-/sqlite_stmt_journals/busybox}"
+  BUSYBOX="${BUSYBOX:-/data/local/busybox}"
+  BUSYBOX_ARMV5="${0%/*}/busybox.armv5"
+else
+  BUSYBOX="${BUSYBOX:-busybox}"
+fi
+
+ADB="${ADB:-adb}"
+
+adb_list() {
+  local DIR="$1"
+  [ -n "$DIR" ] || {
+    DIR="/"
+  }
+
+if [ "$UPLOAD_BUSYBOX" = "yes" ]
+then
+  "$ADB" push "$BUSYBOX_ARMV5" "$BUSYBOX" 2>/dev/null
+  "$ADB" shell chmod 755 "$BUSYBOX"
+fi
+
+#"$ADB" shell "$BUSYBOX" ls --color=never -aelR "$DIR" | tr -d '\r' >adb.ls-lR
+
+# Caveat: We may not have "su" available and granted root access
+#"$ADB" shell "echo $BUSYBOX ls --color=never -aelR $DIR | su" \
+# Do not use "adb_cmd" here!
+"$ADB" shell "echo $BUSYBOX ls --color=never -aelR $DIR | su" \
+| tr -d '\r' \
+| tee $DBG \
+| {
+    PREFIX="/"
+    while read -ra ITEMS
+    do
+# possibly skip inaccessible stuff early
+#false && \
+      case "${ITEMS[*]}" in
+        *'Permission denied'*)
+          errprint DENY ${ITEMS[*]}
+          continue
+          ;;
+      esac
+# directory name can contain whitespace, don't probe for trailing colon
+      case "${ITEMS[0]}" in
+        # Dir entry:
+        # /data/tombstones:
+        '/'*)
+# use full line to include whitespace
+#          PREFIX="${ITEMS[0]%:}/" # Strip trailing ":", append '/'
+          PREFIX="${ITEMS[*]:0}"
+          PREFIX="${PREFIX%:}/" # Strip trailing ":", append '/'
+          PREFIX="${PREFIX/\/\///}" # Replace '//' by '/'
+          PREFIX="${PREFIX#/}" # Strip first "/"
+        ;;
+
+        # Dir
+        # drwxrwx--x    1 1000     1000         2048 Sun Dec 26 00:04:55 2010 data
+        # File
+        # -rwxr-x---    1 0        0          103208 Thu Jan  1 00:00:00 1970 init
+        # Symlink
+        # lrwxrwxrwx    1 0        0              11 Thu May 12 15:02:45 2011 etc -> /system/etc
+        d[rwxst-]????????|-[rwxst-]????????|l[rwxst-]????????)
+          PERMISSIONS="${ITEMS[0]}"
+#          LINKS="${ITEMS[1]}"
+          OWNER="${ITEMS[2]}"
+          GROUP="${ITEMS[3]}"
+          SIZE="${ITEMS[4]}"
+#          WDAY="${ITEMS[5]}"
+          MONTH="${ITEMS[6]}"
+          DAY="${ITEMS[7]}"
+# get time at second precision
+#          TIME="${ITEMS[8]%:*}" # Strip last two digits: 00:00:00 -> 00:00
+          TIME="${ITEMS[8]}"
+          YEAR="${ITEMS[9]}"
+          FILE="${ITEMS[*]:10}"
+
+# "cannot read link" errors may come in two lines:
+# ls: /proc/1/cwd: cannot read link: Permission denied
+# lrwxrwxrwx 1 root root 0 Sat Sep 19 13:34:01 2015 cwd
+# this situation must be handled somewhere else (if at all?)
+          case "$FILE" in
+            # the following situation hasn't been observed by me [steve8x8]
+            # lrwxrwxrwx    1 0        0               0 Fri May 13 09:13:22 2011 cwdls: /proc/1/cwd: cannot read link (not a symlink?)
+            *': cannot read link (not a symlink?)')
+              FILE="${FILE/ls: / -> }" # Replace ls: by ->
+              errprint READ link $FILE
+            ;;
+            '.'|'..')
+              continue # Skip '.' and '..' directory entries
+            ;;
+          esac
+
+          case "$DAY" in
+            [0-9]) DAY="0$DAY" ;;
+          esac
+
+          case "$MONTH" in
+            [0-9]) MONTH="0$MONTH" ;;
+            [0-9][0-9]) ;; # MONTH="$MONTH" ;;
+            Jan) MONTH="01" ;;
+            Feb) MONTH="02" ;;
+            Mar) MONTH="03" ;;
+            Apr) MONTH="04" ;;
+            May) MONTH="05" ;;
+            Jun) MONTH="06" ;;
+            Jul) MONTH="07" ;;
+            Aug) MONTH="08" ;;
+            Sep) MONTH="09" ;;
+            Oct) MONTH="10" ;;
+            Nov) MONTH="11" ;;
+            Dec) MONTH="12" ;;
+            *) MONTH="01" ;;
+          esac
+
+          echo "$PERMISSIONS 1 $OWNER $GROUP $SIZE $MONTH-$DAY-$YEAR $TIME $PREFIX$FILE"
+        ;;
+
+        # Device
+        # crw-rw----    1 1000     1005      10,  56 Thu May 12 15:02:45 2011 msm_pcm_in
+        [cb][rwxst-]????????)
+          PERMISSIONS="${ITEMS[0]}"
+#          LINKS="${ITEMS[1]}"
+          OWNER="${ITEMS[2]}"
+          GROUP="${ITEMS[3]}"
+          MAJOR="${ITEMS[4]%,}" # Strip trailing ","
+          MINOR="${ITEMS[5]}"
+#          WDAY="${ITEMS[6]}"
+          MONTH="${ITEMS[7]}"
+          DAY="${ITEMS[8]}"
+# get time at second precision
+#          TIME="${ITEMS[9]%:*}" # Strip last two digits: 00:00:00 -> 00:00
+          TIME="${ITEMS[9]}"
+          YEAR="${ITEMS[10]}"
+          FILE="${ITEMS[*]:11}"
+
+          case "$DAY" in
+            [0-9]) DAY="0$DAY" ;;
+          esac
+
+          case "$MONTH" in
+            [0-9]) MONTH="0$MONTH" ;;
+            [0-9][0-9]) ;; # MONTH="$MONTH" ;;
+            Jan) MONTH="01" ;;
+            Feb) MONTH="02" ;;
+            Mar) MONTH="03" ;;
+            Apr) MONTH="04" ;;
+            May) MONTH="05" ;;
+            Jun) MONTH="06" ;;
+            Jul) MONTH="07" ;;
+            Aug) MONTH="08" ;;
+            Sep) MONTH="09" ;;
+            Oct) MONTH="10" ;;
+            Nov) MONTH="11" ;;
+            Dec) MONTH="12" ;;
+            *) MONTH="01" ;;
+          esac
+
+          echo "$PERMISSIONS 1 $OWNER $GROUP $MAJOR, $MINOR $MONTH-$DAY-$YEAR $TIME $PREFIX$FILE"
+        ;;
+
+        # Handling of errors - This may be incomplete or even wrong!
+        # Insufficient permissions
+        # ls: can't open '/data': Permission denied
+        # Disappeared during access
+        # ls: /proc/20931/task/20931/fd/3: cannot read link: No such file or directory
+        # Caveat:
+        # If we don't *ignore* forbidden stuff here, it will be dup in the file display!
+        'ls:')
+          case "${ITEMS[*]}" in
+          *"can't open "*)
+            WHY="${ITEMS[*]:4}"
+            case "$WHY" in
+            *'Permission denied')
+#              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[3]//[\':]/} -> FORBIDDEN ${WHY}"
+              errprint DENY open ${ITEMS[3]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            *'No such file or directory')
+#              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[3]//[\':]/} -> GONE ${WHY}"
+              errprint GONE open ${ITEMS[3]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            *)
+              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[3]//[\':]/} -> UNKNOWN ${WHY}"
+              errprint UNKNOWN open ${ITEMS[3]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            esac
+            ;;
+          *'cannot read link'*)
+            WHY="${ITEMS[*]:5}"
+            case "$WHY" in
+            *'Permission denied')
+#              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[1]//[\':]/} -> FORBIDDEN ${WHY}"
+              errprint DENY link ${ITEMS[1]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            *'No such file or directory')
+#              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[1]//[\':]/} -> GONE ${WHY}"
+              errprint GONE link ${ITEMS[1]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            *)
+              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[1]//[\':]/} -> UNKNOWN ${WHY}"
+              errprint UNKNOWN link ${ITEMS[1]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            esac
+            ;;
+          *'Permission denied')
+#            echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[1]//[\':]/} -> FORBIDDEN ${WHY}"
+            errprint DENY ${ITEMS[1]//[\':]/} -\> ${ITEMS[*]}
+            ;;
+          *)
+            errprint UNKNOWN ${ITEMS[*]}
+            ;;
+          esac
+        ;;
+
+#        *)
+#          # Skip: empty lines and totals
+#        ;;
+      esac
+    done
+  } | tee $OUT
+
+}
+
+adb_pull() {
+#  $ADB pull "$@" 2>/dev/null
+  $ADB shell "echo cat \"$1\" | su" >"$2" "$@" 2>/dev/null
+}
+
+adb_push() {
+  $ADB push "$@" 2>/dev/null
+# there is no way to pipe into an adb shell :(
+}
+
+adb_cmd() {
+#  $ADB shell "$@" 2>/dev/null
+  $ADB shell "echo \"$@\" | su" 2>/dev/null
+}
+
+# override any locale for dates
+LC_ALL=C
+export LC_ALL
+
+#echo "$@" >&2
+
+errprint COMMAND \""$@"\"
+COMMAND="$1"
+#unused LOCAL_DIR="$2"
+case "$COMMAND" in
+# Command: list
+  list)
+    adb_list /
+  ;;
+
+# Command: copyout curdir storedfilename extractto
+  copyout)
+    LOCAL="$4"
+    REMOTE="$3"
+    adb_pull "$REMOTE" "$LOCAL"
+    # file timestamp is fixed by mc itself
+  ;;
+
+# Command: copyin curdir storedfilename sourcefile
+  copyin)
+    LOCAL="$4"
+    REMOTE="$3"
+    adb_push "$LOCAL" "$REMOTE"
+    # no way to fix timestamp as $LOCAL's is already wrong
+  ;;
+
+# Command: rm curdir storedfilename
+  rm)
+    REMOTE="$3"
+    adb_cmd $BUSYBOX rm -f "$REMOTE"
+  ;;
+
+# Command: mkdir curdir dirname
+  mkdir)
+    REMOTE="$3"
+    adb_cmd $BUSYBOX mkdir -p "$REMOTE"
+  ;;
+
+# Command: rmdir curdir dirname
+  rmdir)
+    REMOTE="$3"
+    adb_cmd $BUSYBOX rm -rf "$REMOTE"
+  ;;
+
+# Command: run curdir command [arguments?]
+  run)
+    REMOTE_COMMAND="$3"
+    shift 3
+    adb_cmd $BUSYBOX "/$REMOTE_COMMAND" "$@"
+  ;;
+
+  *)
+# this should be output to mc itself - syntax?
+    errprint UNKNOWN \"$@\"
+    exit 1
+  ;;
+esac
+
+exit

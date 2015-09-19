@@ -41,10 +41,10 @@ adb_list() {
     DIR="/"
   }
 
-if [ "$UPLOAD_BUSYBOX" == "yes" ]
+if [ "$UPLOAD_BUSYBOX" = "yes" ]
 then
-  adb push "$BUSYBOX_ARMV5" "$BUSYBOX" 2>/dev/null
-  adb shell chmod 755 "$BUSYBOX"
+  "$ADB" push "$BUSYBOX_ARMV5" "$BUSYBOX" 2>/dev/null
+  "$ADB" shell chmod 755 "$BUSYBOX"
 fi
 
 #"$ADB" shell "$BUSYBOX" ls --color=never -aelR "$DIR" | tr -d '\r' >adb.ls-lR

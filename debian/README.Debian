@@ -1,0 +1,6 @@
+mc-extfs-adb for Debian
+-----------------------
+
+installs into /usr/lib instead of /usr/libexec for RH
+
+ -- Steve Sixty-Four <steve8x8@googlemail.com>  Sat, 19 Sep 2015 23:46:41 +0200

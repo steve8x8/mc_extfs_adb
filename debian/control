@@ -1,0 +1,25 @@
+Source: mc-extfs-adb
+Section: unknown
+Priority: optional
+Maintainer: Steve Sixty-Four <steve8x8@googlemail.com>
+Build-Depends: debhelper (>= 7)
+Standards-Version: 3.9.5
+Homepage: http://subversion.assembla.com/svn/bash-modules/tools/trunk/mc-extfs-adb
+Vcs-Git: https://github.com/steve8x8/mc_extfs_adb.git
+
+Package: mc-extfs-adb
+Architecture: all
+Depends: ${misc:Depends}, android-tools-adb
+Recommends: mc
+Description: adb VFS extension for Midnight Commander
+ External file system for browsing and editing file system on Android
+ powered devices using Midnight Commander.
+ Enter "cd #adb" or Alt-C and "#adb" to view remote file system.
+ Script may (shouldn't) upload busybox and will load whole file system tree
+ at first run, so first run will be slow but susbsequent operations will be fast.
+ Note: Don't forget to free VFS using "Ctrl-X a" when you want to reload file
+ system tree.
+
+# cd adb:// (or cd adbsu://) will give you access to the filesystem
+# on your Android mobile phone, for read and write operations.
+

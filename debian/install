@@ -1,0 +1,4 @@
+usr/lib/mc/extfs.d/adb+
+usr/lib/mc/extfs.d/adbsu+
+#usr/lib/mc/extfs.d/extfs
+#usr/lib/mc/extfs.d/busybox.armv5

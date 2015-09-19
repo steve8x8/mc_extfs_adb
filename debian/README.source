@@ -1,0 +1,9 @@
+mc-extfs-adb for Debian
+-----------------------
+
+Obtained from SVN release 107 at 
+http://subversion.assembla.com/svn/bash-modules/tools/trunk/mc-extfs-adb
+and somewhat polished and bugfixed.
+
+ -- Steve Sixty-Four <steve8x8@googlemail.com>  Sat, 19 Sep 2015 23:46:41 +0200
+

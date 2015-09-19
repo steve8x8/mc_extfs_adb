@@ -1,0 +1,22 @@
+#!/usr/bin/make -f
+# See debhelper(7) (uncomment to enable)
+# output every command that modifies files on the build system.
+#DH_VERBOSE = 1
+
+DPKG_EXPORT_BUILDFLAGS = 1
+
+%:
+	dh $@
+
+override_dh_pysupport:
+override_dh_auto_configure:
+override_dh_auto_build:
+
+override_dh_auto_install:
+	mkdir $(CURDIR)/debian/tmp
+	cp -rp $(CURDIR)/src/* $(CURDIR)/debian/tmp/
+	mv $(CURDIR)/debian/tmp/usr/libexec $(CURDIR)/debian/tmp/usr/lib
+	dh_install
+
+
+

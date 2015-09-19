@@ -22,6 +22,52 @@
 #  MA 02110-1301, USA.
 
 
+# Modifications by steve8x8@googlemail.com, 2014--2015
+# Prerequisites: busybox on mobile
+# Use bash instead of sh (Debian has sh=dash),
+# at least "read -a" is a bashism...
+# Time stamps now correct to the second
+
+# the following environment variables may be defined:
+# $DEBUG
+# $UPLOAD_BUSYBOX (requires the armv5 busybox in install directory)
+#  $BUSYBOX (path to put busybox on device)
+# $ADB
+
+# Known bugs:
+# - unable to set timestamp after write (mc doesn't provide one)
+# - no mapping of UIDs and GIDs (unknown ones get set to current user's)
+# - unreadable directories are shown as empty (or not at all)
+# - no automatic detection whether "su" has to be used
+
+# provide some debugging output
+# (1=only errors, 2=also file list, 3: original ls output)
+DEBUG=${DEBUG:-0}
+ DEBUG=1
+if [ $DEBUG -ge 1 ]
+then
+  ERR=/tmp/`basename $0`.err
+else
+  ERR=/dev/null
+fi
+if [ $DEBUG -ge 2 ]
+then
+  OUT=/tmp/`basename $0`.out
+else
+  OUT=/dev/null
+fi
+if [ $DEBUG -ge 3 ]
+then
+  DBG=/tmp/`basename $0`.dbg
+else
+  DBG=/dev/null
+fi
+errprint() {
+  [ $DEBUG -ne 0 ] && \
+  echo `date +%Y%m%d-%H%M%S:` $@ >> $ERR
+}
+
+
 # Better have busybox installed using BusyboxInstaller app.
 UPLOAD_BUSYBOX="${UPLOAD_BUSYBOX:-no}"
 if [ "$UPLOAD_BUSYBOX" = "yes" ]
@@ -49,7 +95,13 @@ fi
 
 #"$ADB" shell "$BUSYBOX" ls --color=never -aelR "$DIR" | tr -d '\r' >adb.ls-lR
 
-"$ADB" shell "$BUSYBOX" ls --color=never -aelR "$DIR" | tr -d '\r' | {
+# Caveat: We may not have "su" available and granted root access
+#"$ADB" shell "echo $BUSYBOX ls --color=never -aelR $DIR | su" \
+# Do not use "adb_cmd" here!
+"$ADB" shell "$BUSYBOX ls --color=never -aelR $DIR" \
+| tr -d '\r' \
+| tee $DBG \
+| {
     PREFIX="/"
     while read -ra ITEMS
     do
@@ -237,7 +289,7 @@ fi
 #        ;;
       esac
     done
-  }
+  } | tee $OUT
 
 }
 
@@ -259,7 +311,9 @@ export LC_ALL
 
 #echo "$@" >&2
 
+errprint COMMAND \""$@"\"
 COMMAND="$1"
+#unused LOCAL_DIR="$2"
 case "$COMMAND" in
 # Command: list
   list)
@@ -308,6 +362,8 @@ case "$COMMAND" in
   ;;
 
   *)
+# this should be output to mc itself - syntax?
+    errprint UNKNOWN \"$@\"
     exit 1
   ;;
 esac

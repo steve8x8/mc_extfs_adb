@@ -1,6 +1,7 @@
-mc-extfs-adb (0.107-1) unstable; urgency=low
+mc-extfs-adb (0.107-2) unstable; urgency=low
 
   * Initial release starting from original SVN rev. 107
   * Bugfixes and enhancements to run with recent mc and adb
+  * Man page
 
- -- Steffen <Steve Sixty-Four <steve8x8@googlemail.com>>  Sat, 19 Sep 2015 23:46:41 +0200
+ -- Steve Sixty-Four <steve8x8@googlemail.com>  Sat, 19 Sep 2015 23:46:41 +0200

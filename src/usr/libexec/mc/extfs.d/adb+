@@ -271,6 +271,7 @@ case "$COMMAND" in
     LOCAL="$4"
     REMOTE="$3"
     adb_pull "$REMOTE" "$LOCAL"
+    # file timestamp is fixed by mc itself
   ;;
 
 # Command: copyin curdir storedfilename sourcefile
@@ -278,6 +279,7 @@ case "$COMMAND" in
     LOCAL="$4"
     REMOTE="$3"
     adb_push "$LOCAL" "$REMOTE"
+    # no way to fix timestamp as $LOCAL's is already wrong
   ;;
 
 # Command: rm curdir storedfilename

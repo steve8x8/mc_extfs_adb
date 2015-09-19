@@ -1,10 +1,10 @@
 .\"                                      Hey, EMACS: -*- nroff -*-
-.\" (C) Copyright 2015 Steffen <Steve Sixty-Four <steve8x8@googlemail.com>>,
+.\" (C) Copyright 2015 Steve Sixty-Four <steve8x8@googlemail.com>
 .\"
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH MC-EXTFS-ADB SECTION "September 19, 2015"
+.TH MC-EXTFS-ADB 1 "September 19, 2015"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -18,39 +18,29 @@
 .\" .sp <n>    insert n+1 empty lines
 .\" for manpage-specific macros, see man(7)
 .SH NAME
-mc-extfs-adb \- program to do something
+mc-extfs-adb \- adb and adbsu VFS modules for Midnight COmmander
 .SH SYNOPSIS
-.B mc-extfs-adb
-.RI [ options ] " files" ...
-.br
-.B bar
-.RI [ options ] " files" ...
+.B adb://, adbsu://
 .SH DESCRIPTION
 This manual page documents briefly the
-.B mc-extfs-adb
+.B adb
 and
-.B bar
-commands.
+.B adbsu
+VFS modules.
 .PP
 .\" TeX users may be more comfortable with the \fB<whatever>\fP and
 .\" \fI<whatever>\fP escape sequences to invode bold face and italics,
 .\" respectively.
-\fBmc-extfs-adb\fP is a program that...
 .SH OPTIONS
-These programs follow the usual GNU command line syntax, with long
-options starting with two dashes (`-').
-A summary of options is included below.
-For a complete description, see the Info files.
-.TP
-.B \-h, \-\-help
-Show summary of options.
-.TP
-.B \-v, \-\-version
-Show version of program.
+These modules can be used in a MC context, by changing to a virtual 
+directory tree using
+.B cd adb://
+or
+.B cd adbsu://
+.PP
+The difference between both methods is that \fBadbsu\fR uses \fIsu\fR
+for filesystem access and sees all files, directories and links while
+\fBadb\fR may not.
 .SH SEE ALSO
-.BR bar (1),
-.BR baz (1).
+.BR mc (1)
 .br
-The programs are documented fully by
-.IR "The Rise and Fall of a Fooish Bar" ,
-available via the Info system.

@@ -53,6 +53,14 @@ fi
     PREFIX="/"
     while read -ra ITEMS
     do
+# possibly skip inaccessible stuff early
+#false && \
+      case "${ITEMS[*]}" in
+        *'Permission denied'*)
+          errprint DENY ${ITEMS[*]}
+          continue
+          ;;
+      esac
 # directory name can contain whitespace, don't probe for trailing colon
       case "${ITEMS[0]}" in
         # Dir entry:
@@ -87,13 +95,19 @@ fi
           YEAR="${ITEMS[9]}"
           FILE="${ITEMS[*]:10}"
 
+# "cannot read link" errors may come in two lines:
+# ls: /proc/1/cwd: cannot read link: Permission denied
+# lrwxrwxrwx 1 root root 0 Sat Sep 19 13:34:01 2015 cwd
+# this situation must be handled somewhere else (if at all?)
           case "$FILE" in
+            # the following situation hasn't been observed by me [steve8x8]
             # lrwxrwxrwx    1 0        0               0 Fri May 13 09:13:22 2011 cwdls: /proc/1/cwd: cannot read link (not a symlink?)
             *': cannot read link (not a symlink?)')
               FILE="${FILE/ls: / -> }" # Replace ls: by ->
+              errprint READ link $FILE
             ;;
             '.'|'..')
-              continue # Skip '.' and '..' directrory entries
+              continue # Skip '.' and '..' directory entries
             ;;
           esac
 
@@ -165,10 +179,57 @@ fi
           echo "$PERMISSIONS 1 $OWNER $GROUP $MAJOR, $MINOR $MONTH-$DAY-$YEAR $TIME $PREFIX$FILE"
         ;;
 
+        # Handling of errors - This may be incomplete or even wrong!
         # Insufficient permissions
         # ls: can't open '/data': Permission denied
+        # Disappeared during access
+        # ls: /proc/20931/task/20931/fd/3: cannot read link: No such file or directory
+        # Caveat:
+        # If we don't *ignore* forbidden stuff here, it will be dup in the file display!
         'ls:')
-          echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[3]//[\':]/}/INFO -> ${ITEMS[*]}"
+          case "${ITEMS[*]}" in
+          *"can't open "*)
+            WHY="${ITEMS[*]:4}"
+            case "$WHY" in
+            *'Permission denied')
+#              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[3]//[\':]/} -> FORBIDDEN ${WHY}"
+              errprint DENY open ${ITEMS[3]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            *'No such file or directory')
+#              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[3]//[\':]/} -> GONE ${WHY}"
+              errprint GONE open ${ITEMS[3]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            *)
+              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[3]//[\':]/} -> UNKNOWN ${WHY}"
+              errprint UNKNOWN open ${ITEMS[3]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            esac
+            ;;
+          *'cannot read link'*)
+            WHY="${ITEMS[*]:5}"
+            case "$WHY" in
+            *'Permission denied')
+#              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[1]//[\':]/} -> FORBIDDEN ${WHY}"
+              errprint DENY link ${ITEMS[1]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            *'No such file or directory')
+#              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[1]//[\':]/} -> GONE ${WHY}"
+              errprint GONE link ${ITEMS[1]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            *)
+              echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[1]//[\':]/} -> UNKNOWN ${WHY}"
+              errprint UNKNOWN link ${ITEMS[1]//[\':]/} -\> ${ITEMS[*]}
+              ;;
+            esac
+            ;;
+          *'Permission denied')
+#            echo "lrwxrwxrwx 1 0 0 0 01-01-1970 00:00:00 ${ITEMS[1]//[\':]/} -> FORBIDDEN ${WHY}"
+            errprint DENY ${ITEMS[1]//[\':]/} -\> ${ITEMS[*]}
+            ;;
+          *)
+            errprint UNKNOWN ${ITEMS[*]}
+            ;;
+          esac
         ;;
 
 #        *)

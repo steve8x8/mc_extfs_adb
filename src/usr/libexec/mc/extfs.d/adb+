@@ -53,11 +53,15 @@ fi
     PREFIX="/"
     while read -ra ITEMS
     do
+# directory name can contain whitespace, don't probe for trailing colon
       case "${ITEMS[0]}" in
         # Dir entry:
         # /data/tombstones:
-        '/'*':')
-          PREFIX="${ITEMS[0]%:}/" # Strip trailing ":", append '/'
+        '/'*)
+# use full line to include whitespace
+#          PREFIX="${ITEMS[0]%:}/" # Strip trailing ":", append '/'
+          PREFIX="${ITEMS[*]:0}"
+          PREFIX="${PREFIX%:}/" # Strip trailing ":", append '/'
           PREFIX="${PREFIX/\/\///}" # Replace '//' by '/'
           PREFIX="${PREFIX#/}" # Strip first "/"
         ;;

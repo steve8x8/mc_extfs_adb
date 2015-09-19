@@ -77,7 +77,9 @@ fi
 #          WDAY="${ITEMS[5]}"
           MONTH="${ITEMS[6]}"
           DAY="${ITEMS[7]}"
-          TIME="${ITEMS[8]%:*}" # Strip last two digits: 00:00:00 -> 00:00
+# get time at second precision
+#          TIME="${ITEMS[8]%:*}" # Strip last two digits: 00:00:00 -> 00:00
+          TIME="${ITEMS[8]}"
           YEAR="${ITEMS[9]}"
           FILE="${ITEMS[*]:10}"
 
@@ -128,7 +130,9 @@ fi
 #          WDAY="${ITEMS[6]}"
           MONTH="${ITEMS[7]}"
           DAY="${ITEMS[8]}"
-          TIME="${ITEMS[9]%:*}" # Strip last two digits: 00:00:00 -> 00:00
+# get time at second precision
+#          TIME="${ITEMS[9]%:*}" # Strip last two digits: 00:00:00 -> 00:00
+          TIME="${ITEMS[9]}"
           YEAR="${ITEMS[10]}"
           FILE="${ITEMS[*]:11}"
 

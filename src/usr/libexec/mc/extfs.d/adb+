@@ -322,6 +322,31 @@ adb_cmd() {
 LC_ALL=C
 export LC_ALL
 
+ADB="${ADB:-`which adb`}"
+BUSYBOX="${BUSYBOX:-busybox}"
+
+if [ -z "$ADB" ]; then
+  echo "Error: could not find adb"
+  exit 1
+fi
+
+ADB_STATE=`"$ADB" get-state | tail -n1`
+if [ "$ADB_STATE" != "device" ]; then
+  "$ADB" kill-server > /dev/null 2>&1
+  "$ADB" usb         > /dev/null 2>&1
+fi
+
+ADB_STATE=`"$ADB" get-state | tail -n1`
+if [ "$ADB_STATE" != "device" ]; then
+  echo "Error: adb cannot connect to device: $ADB_STATE"
+  exit 1
+fi
+
+RBUSYBOX=`"$ADB" shell which "$BUSYBOX"`
+if [ -z "$RBUSYBOX" ]; then
+  echo "Error: no \"$BUSYBOX\" on device"
+  exit 1
+fi
 
 errprint COMMAND \""$@"\"
 COMMAND="$1"

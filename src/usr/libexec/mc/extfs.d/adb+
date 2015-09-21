@@ -24,14 +24,15 @@
 
 # Modifications by steve8x8@googlemail.com, 2014--2015
 # Prerequisites: busybox on mobile
+# - builtin ls doesn't return timestamp seconds
+# - provided "buggy" busybox is unreliable
 # Use bash instead of sh (Debian has sh=dash),
 # at least "read -a" is a bashism...
 # Time stamps now correct to the second
 
 # the following environment variables may be defined:
 # $DEBUG
-# $UPLOAD_BUSYBOX (requires the armv5 busybox in install directory)
-#  $BUSYBOX (path to put busybox on device)
+# $BUSYBOX (path to busybox on device)
 # $ADB
 
 # Known bugs:
@@ -68,18 +69,8 @@ errprint() {
 }
 
 
-# Better have busybox installed using BusyboxInstaller app.
-UPLOAD_BUSYBOX="${UPLOAD_BUSYBOX:-no}"
-if [ "$UPLOAD_BUSYBOX" = "yes" ]
-then
-#  BUSYBOX="${BUSYBOX:-/sqlite_stmt_journals/busybox}"
-  BUSYBOX="${BUSYBOX:-/data/local/busybox}"
-  BUSYBOX_ARMV5="${0%/*}/busybox.armv5"
-else
-  BUSYBOX="${BUSYBOX:-busybox}"
-fi
-
 ADB="${ADB:-adb}"
+BUSYBOX="${BUSYBOX:-busybox}"
 
 adb_list() {
   local DIR="$1"

@@ -89,7 +89,9 @@ fi
 # Caveat: We may not have "su" available and granted root access
 #"$ADB" shell "echo $BUSYBOX ls --color=never -aelR $DIR | su" \
 # Do not use "adb_cmd" here!
-"$ADB" shell "$BUSYBOX ls --color=never -aelR $DIR" \
+# -n results in unknown UIDs and GIDs not to be mapped on user's values
+#"$ADB" shell "$BUSYBOX ls --color=never -aelR $DIR" \
+"$ADB" shell "$BUSYBOX ls --color=never -aelRn $DIR" \
 | tr -d '\r' \
 | tee $DBG \
 | {

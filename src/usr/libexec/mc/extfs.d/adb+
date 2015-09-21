@@ -41,6 +41,9 @@
 # - unreadable directories are shown as empty (or not at all)
 # - no automatic detection whether "su" has to be used
 
+# 2015-09-21: Merged some ideas from
+#  https://raw.githubusercontent.com/init6/init_6/master/app-misc/mc/files/mc-4.8.13-adb-extfs-adb-plugin.patch
+
 # provide some debugging output
 # (1=only errors, 2=also file list, 3: original ls output)
 DEBUG=${DEBUG:-0}

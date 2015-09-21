@@ -72,9 +72,6 @@ errprint() {
 }
 
 
-ADB="${ADB:-adb}"
-BUSYBOX="${BUSYBOX:-busybox}"
-
 adb_list() {
   local DIR="$1"
   [ -n "$DIR" ] || {
@@ -289,79 +286,54 @@ fi
 
 }
 
-adb_pull() {
-  $ADB pull "$@" 2>/dev/null
+adb_copyout() {
+  FROM="$2"
+  TO="$3"
+  $ADB pull "$FROM" "$TO" &> /dev/null
 }
 
-adb_push() {
-  $ADB push "$@" 2>/dev/null
+adb_copyin() {
+  TO="$2"
+  FROM="$3"
+  $ADB push "$FROM" "$TO" &> /dev/null
+}
+
+adb_mkdir() {
+  DIR="$2"
+  $ADB shell mkdir -p "$DIR" &> /dev/null
+}
+
+adb_rmdir() {
+  DIR="$2"
+#  $ADB shell rm -rf "$DIR" &> /dev/null
+  $ADB shell rmdir "$DIR" &> /dev/null
+}
+
+adb_rm() {
+  FILE="$2"
+  $ADB shell rm -f "$FILE" &> /dev/null
 }
 
 adb_cmd() {
-  $ADB shell "$@" 2>/dev/null
+  $ADB shell "$@" &> /dev/null
 }
 
 # override any locale for dates
 LC_ALL=C
 export LC_ALL
 
-#echo "$@" >&2
 
 errprint COMMAND \""$@"\"
 COMMAND="$1"
-#unused LOCAL_DIR="$2"
+shift
 case "$COMMAND" in
-# Command: list
-  list)
-    adb_list /
-  ;;
-
-# Command: copyout curdir storedfilename extractto
-  copyout)
-    LOCAL="$4"
-    REMOTE="$3"
-    adb_pull "$REMOTE" "$LOCAL"
-    # file timestamp is fixed by mc itself
-  ;;
-
-# Command: copyin curdir storedfilename sourcefile
-  copyin)
-    LOCAL="$4"
-    REMOTE="$3"
-    adb_push "$LOCAL" "$REMOTE"
-    # no way to fix timestamp as $LOCAL's is already wrong
-  ;;
-
-# Command: rm curdir storedfilename
-  rm)
-    REMOTE="$3"
-    adb_cmd $BUSYBOX rm -f "$REMOTE"
-  ;;
-
-# Command: mkdir curdir dirname
-  mkdir)
-    REMOTE="$3"
-    adb_cmd $BUSYBOX mkdir -p "$REMOTE"
-  ;;
-
-# Command: rmdir curdir dirname
-  rmdir)
-    REMOTE="$3"
-    adb_cmd $BUSYBOX rm -rf "$REMOTE"
-  ;;
-
-# Command: run curdir command [arguments?]
-  run)
-    REMOTE_COMMAND="$3"
-    shift 3
-    adb_cmd $BUSYBOX "/$REMOTE_COMMAND" "$@"
-  ;;
-
-  *)
-# this should be output to mc itself - syntax?
-    errprint UNKNOWN \"$@\"
-    exit 1
-  ;;
+  list)    adb_list    "${1:-/}" ;;
+  copyout) adb_copyout "$@" ;;
+  copyin)  adb_copyin  "$@" ;;
+  mkdir)   adb_mkdir   "$@" ;;
+  rmdir)   adb_rmdir   "$@" ;;
+  rm)      adb_rm      "$@" ;;
+  *)       echo "Error: unknown command \"$@\""; exit 1 ;;
 esac
 
 exit

@@ -24,14 +24,15 @@
 
 # Modifications by steve8x8@googlemail.com, 2014--2015
 # Prerequisites: busybox on mobile
+# - builtin ls doesn't return timestamp seconds
+# - provided "buggy" busybox is unreliable
 # Use bash instead of sh (Debian has sh=dash),
 # at least "read -a" is a bashism...
 # Time stamps now correct to the second
 
 # the following environment variables may be defined:
 # $DEBUG
-# $UPLOAD_BUSYBOX (requires the armv5 busybox in install directory)
-#  $BUSYBOX (path to put busybox on device)
+# $BUSYBOX (path to busybox on device)
 # $ADB
 
 # Known bugs:
@@ -39,6 +40,9 @@
 # - no mapping of UIDs and GIDs (unknown ones get set to current user's)
 # - unreadable directories are shown as empty (or not at all)
 # - no automatic detection whether "su" has to be used
+
+# 2015-09-21: Merged some ideas from
+#  https://raw.githubusercontent.com/init6/init_6/master/app-misc/mc/files/mc-4.8.13-adb-extfs-adb-plugin.patch
 
 # provide some debugging output
 # (1=only errors, 2=also file list, 3: original ls output)
@@ -68,19 +72,6 @@ errprint() {
 }
 
 
-# Better have busybox installed using BusyboxInstaller app.
-UPLOAD_BUSYBOX="${UPLOAD_BUSYBOX:-no}"
-if [ "$UPLOAD_BUSYBOX" = "yes" ]
-then
-#  BUSYBOX="${BUSYBOX:-/sqlite_stmt_journals/busybox}"
-  BUSYBOX="${BUSYBOX:-/data/local/busybox}"
-  BUSYBOX_ARMV5="${0%/*}/busybox.armv5"
-else
-  BUSYBOX="${BUSYBOX:-busybox}"
-fi
-
-ADB="${ADB:-adb}"
-
 adb_list() {
   local DIR="$1"
   [ -n "$DIR" ] || {
@@ -96,9 +87,10 @@ fi
 #"$ADB" shell "$BUSYBOX" ls --color=never -aelR "$DIR" | tr -d '\r' >adb.ls-lR
 
 # Caveat: We may not have "su" available and granted root access
-#"$ADB" shell "echo $BUSYBOX ls --color=never -aelR $DIR | su" \
 # Do not use "adb_cmd" here!
-"$ADB" shell "echo $BUSYBOX ls --color=never -aelR $DIR | su" \
+# -n results in unknown UIDs and GIDs not to be mapped on user's values
+#"$ADB" shell "echo $BUSYBOX ls --color=never -aelR $DIR | su" \
+"$ADB" shell "echo $BUSYBOX ls --color=never -aelRn $DIR | su" \
 | tr -d '\r' \
 | tee $DBG \
 | {
@@ -293,82 +285,98 @@ fi
 
 }
 
-adb_pull() {
-#  $ADB pull "$@" 2>/dev/null
-  $ADB shell "echo cat \"$1\" | su" >"$2" "$@" 2>/dev/null
+adb_copyout() {
+  FROM="$2"
+  TO="$3"
+#  $ADB pull "$FROM" "$TO" &> /dev/null
+  $ADB shell "echo cat \"$FROM\" | su" > "$TO" 2> /dev/null
 }
 
-adb_push() {
-  $ADB push "$@" 2>/dev/null
-# there is no way to pipe into an adb shell :(
+adb_copyin() {
+  TO="$2"
+  FROM="$3"
+  $ADB push "$FROM" "$TO" &> /dev/null
+# there is no way to pipe stdin into adb shell :(
+}
+
+adb_mkdir() {
+  DIR="$2"
+  $ADB shell "echo mkdir -p \"$DIR\" | su" &> /dev/null
+}
+
+adb_rmdir() {
+  DIR="$2"
+#  $ADB shell rm -rf "$DIR" &> /dev/null
+  $ADB shell "echo rmdir \"$DIR\" | su" &> /dev/null
+}
+
+adb_rm() {
+  FILE="$2"
+#  $ADB shell rm -f "$FILE" &> /dev/null
+  $ADB shell "echo rm -f \"$FILE\" | su" &> /dev/null
 }
 
 adb_cmd() {
-#  $ADB shell "$@" 2>/dev/null
-  $ADB shell "echo \"$@\" | su" 2>/dev/null
+#  $ADB shell "$@" &> /dev/null
+  $ADB shell "echo \"$@\" | su" &> /dev/null
 }
 
 # override any locale for dates
 LC_ALL=C
 export LC_ALL
 
-#echo "$@" >&2
+ADB="${ADB:-`which adb`}"
+BUSYBOX="${BUSYBOX:-busybox}"
+SU=su
+
+if [ -z "$ADB" ]; then
+  echo "Error: could not find adb"
+  exit 1
+fi
+
+ADB_STATE=`"$ADB" get-state | tail -n1`
+if [ "$ADB_STATE" != "device" ]; then
+  "$ADB" kill-server > /dev/null 2>&1
+  "$ADB" usb         > /dev/null 2>&1
+fi
+
+ADB_STATE=`"$ADB" get-state | tail -n1`
+if [ "$ADB_STATE" != "device" ]; then
+  echo "Error: adb cannot connect to device: $ADB_STATE"
+  exit 1
+fi
+
+RBUSYBOX=`"$ADB" shell which "$BUSYBOX"`
+if [ -z "$RBUSYBOX" ]; then
+  echo "Error: no $BUSYBOX on device"
+  exit 1
+fi
+
+# check whether there is su
+RSU=`"$ADB" shell which "$SU"`
+if [ -z "$RSU" ]; then
+  echo "Error: no $SU on device"
+  exit 1
+fi
+
+# check whether adb has been granted su
+RSU=`"$ADB" shell "echo ls -l /proc/1/cwd | su"`
+if [ -z "$RSU" ]; then
+  echo "Error: $SU access not granted on device"
+  exit 1
+fi
 
 errprint COMMAND \""$@"\"
 COMMAND="$1"
-#unused LOCAL_DIR="$2"
+shift
 case "$COMMAND" in
-# Command: list
-  list)
-    adb_list /
-  ;;
-
-# Command: copyout curdir storedfilename extractto
-  copyout)
-    LOCAL="$4"
-    REMOTE="$3"
-    adb_pull "$REMOTE" "$LOCAL"
-    # file timestamp is fixed by mc itself
-  ;;
-
-# Command: copyin curdir storedfilename sourcefile
-  copyin)
-    LOCAL="$4"
-    REMOTE="$3"
-    adb_push "$LOCAL" "$REMOTE"
-    # no way to fix timestamp as $LOCAL's is already wrong
-  ;;
-
-# Command: rm curdir storedfilename
-  rm)
-    REMOTE="$3"
-    adb_cmd $BUSYBOX rm -f "$REMOTE"
-  ;;
-
-# Command: mkdir curdir dirname
-  mkdir)
-    REMOTE="$3"
-    adb_cmd $BUSYBOX mkdir -p "$REMOTE"
-  ;;
-
-# Command: rmdir curdir dirname
-  rmdir)
-    REMOTE="$3"
-    adb_cmd $BUSYBOX rm -rf "$REMOTE"
-  ;;
-
-# Command: run curdir command [arguments?]
-  run)
-    REMOTE_COMMAND="$3"
-    shift 3
-    adb_cmd $BUSYBOX "/$REMOTE_COMMAND" "$@"
-  ;;
-
-  *)
-# this should be output to mc itself - syntax?
-    errprint UNKNOWN \"$@\"
-    exit 1
-  ;;
+  list)    adb_list    "${1:-/}" ;;
+  copyout) adb_copyout "$@" ;;
+  copyin)  adb_copyin  "$@" ;;
+  mkdir)   adb_mkdir   "$@" ;;
+  rmdir)   adb_rmdir   "$@" ;;
+  rm)      adb_rm      "$@" ;;
+  *)       echo "Error: unknown command \"$@\""; exit 1 ;;
 esac
 
 exit

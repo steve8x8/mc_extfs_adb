@@ -344,7 +344,7 @@ fi
 
 RBUSYBOX=`"$ADB" shell which "$BUSYBOX"`
 if [ -z "$RBUSYBOX" ]; then
-  echo "Error: no \"$BUSYBOX\" on device"
+  echo "Error: no $BUSYBOX on device"
   exit 1
 fi
 
@@ -358,7 +358,7 @@ case "$COMMAND" in
   mkdir)   adb_mkdir   "$@" ;;
   rmdir)   adb_rmdir   "$@" ;;
   rm)      adb_rm      "$@" ;;
-  *)       echo "Error: unknown command \"$@\""; exit 1 ;;
+  *)       echo "Error: unknown command $@"; exit 1 ;;
 esac
 
 exit

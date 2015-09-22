@@ -47,7 +47,7 @@
 # provide some debugging output
 # (1=only errors, 2=also file list, 3: original ls output)
 DEBUG=${DEBUG:-0}
- DEBUG=1
+#DEBUG=1
 if [ $DEBUG -ge 1 ]
 then
   ERR=/tmp/`basename $0`.err

@@ -3,10 +3,11 @@ adb+:
 Adb+ is external file system for browsing and editing file system on
 Android powered devices using Midnight Commander.
 
-Usage: enter "cd #adb" or Alt-C and "#adb" to view remote file system.
+Usage: enter "cd adb://" or Alt-C and "adb://" to view remote file system.
 
-Script will upload busybox and will load whole file system tree at first
-run, so first run will be slow but susbsequent operations will be fast.
+Script will check for, and use an existing, busybox and will load 
+the whole file system tree at first run, so first run will be slow
+but susbsequent operations will be fast.
 
 Supported operations are:
 
@@ -18,6 +19,13 @@ Supported operations are:
 
 Note: Don't forget to free VFS when you want to reread directory
 contents using key combination "Ctrl-X a".
+
+adbsu+:
+
+Adbsu+ is the su-enabled sibling of adb+.
+It tries to perform actions on the Android device using su 
+(access has to be granted).
+Exception: Writes use the normal "adb push" without su power.
 
 
 Extfs:

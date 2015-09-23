@@ -346,7 +346,8 @@ if [ "$ADB_STATE" != "device" ]; then
   exit 1
 fi
 
-RBUSYBOX=`"$ADB" shell which "$BUSYBOX"`
+# "which" may not exist at all - indicating missing busybox
+RBUSYBOX=`"$ADB" shell which "$BUSYBOX" | grep -v "not found"`
 if [ -z "$RBUSYBOX" ]; then
   echo "Error: no $BUSYBOX on device"
   exit 1

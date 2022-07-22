@@ -6,9 +6,10 @@ Source: https://github.com/steve8x8/mc_extfs_adb
 Files: *
 Copyright: 2011 Volodymyr M. Lisivka  <vlisivka@gmail.com>
 License: GPL-2.0+
+Modifications: 2015-2022 Steve Sixty-Four <steve8x8@googlemail.com>
 
 Files: debian/*
-Copyright: 2015 Steve Sixty-Four <steve8x8@googlemail.com>
+Copyright: 2015-2022 Steve Sixty-Four <steve8x8@googlemail.com>
 License: GPL-2.0+
 
 License: GPL-2.0+

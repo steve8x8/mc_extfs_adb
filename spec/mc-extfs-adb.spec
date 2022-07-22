@@ -55,7 +55,8 @@ rm -rf "$RPM_BUILD_ROOT"
 
 %files
 %defattr(0644,root,root,755)
-%doc README.txt Changelog COPYING.GPLv2 README-busybox.txt
+###%doc README.txt Changelog COPYING.GPLv2 README-busybox.txt
+%doc README.txt Changelog COPYING.GPLv2
 
 %attr(755,root,root) /usr/libexec/mc/extfs.d/adb+
 %attr(755,root,root) /usr/libexec/mc/extfs.d/extfs

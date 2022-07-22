@@ -1,3 +1,10 @@
+mc-extfs-adb (0.20220722-0.10) unstable; urgency=low
+
+  * Partial rewrite: no busybox, use features of modern Androids
+  * Intermediate release
+
+ -- Steve Sixty-Four <steve8x8@googlemail.com>  Fri, 22 Jul 2022 19:00:00 +0000
+
 mc-extfs-adb (0.107-3) unstable; urgency=low
 
   * Initial release starting from original SVN rev. 107

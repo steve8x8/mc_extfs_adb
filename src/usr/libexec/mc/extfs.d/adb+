@@ -64,7 +64,7 @@ esac
 
 # provide debugging output
 # (1=only errors, 2=also file list, 3: original ls output)
-DEBUG=${DEBUG:-3}
+DEBUG=${DEBUG:-0}
 ERR=/dev/null
 [ $DEBUG -ge 1 ] && ERR=${TMPDIR:-/tmp}/`basename "$0"`.err
 OUT=/dev/null

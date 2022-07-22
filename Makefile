@@ -1,7 +1,7 @@
 #!/usr/bin/env make -f
 
 PACKAGE := mc-extfs-adb
-VERSION := 0.107
+VERSION := 0.20220722
 
 all:	clean tgz deb
 

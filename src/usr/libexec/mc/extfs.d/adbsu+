@@ -23,16 +23,12 @@
 
 
 # Modifications by steve8x8@googlemail.com, 2014--2015
-# Prerequisites: busybox on mobile
-# - builtin ls doesn't return timestamp seconds
-# - provided "buggy" busybox is unreliable
 # Use bash instead of sh (Debian has sh=dash),
 # at least "read -a" is a bashism...
 # Time stamps now correct to the second
 
 # the following environment variables may be defined:
 # $DEBUG
-# $BUSYBOX (path to busybox on device)
 # $ADB
 
 # Known bugs:
@@ -43,57 +39,55 @@
 
 # 2015-09-21: Merged some ideas from
 #  https://raw.githubusercontent.com/init6/init_6/master/app-misc/mc/files/mc-4.8.13-adb-extfs-adb-plugin.patch
+# 2022-07-21: Review for modern Android versions (tested with LOS 18.1, 14.1), drop busybox, escapes
+# note: intentional messages to stderr will be shown at the end of an operation only, making them pointless :(
 
-# provide some debugging output
+# start directory
+START=/sdcard/Music
+START=/sdcard
+START=/
+case $START in
+  */)	;;
+  *) START=${START}/
+	;;
+esac
+# provide debugging output
 # (1=only errors, 2=also file list, 3: original ls output)
-DEBUG=${DEBUG:-0}
-#DEBUG=1
-if [ $DEBUG -ge 1 ]
-then
-  ERR=/tmp/`basename $0`.err
-else
-  ERR=/dev/null
-fi
-if [ $DEBUG -ge 2 ]
-then
-  OUT=/tmp/`basename $0`.out
-else
-  OUT=/dev/null
-fi
-if [ $DEBUG -ge 3 ]
-then
-  DBG=/tmp/`basename $0`.dbg
-else
-  DBG=/dev/null
-fi
+DEBUG=${DEBUG:-3}
+ERR=/dev/null
+[ $DEBUG -ge 1 ] && ERR=${TMPDIR:-/tmp}/`basename "$0"`.err
+OUT=/dev/null
+[ $DEBUG -ge 2 ] && OUT=${TMPDIR:-/tmp}/`basename "$0"`.out
+DBG=/dev/null
+[ $DEBUG -ge 3 ] && DBG=${TMPDIR:-/tmp}/`basename "$0"`.dbg
+
 errprint() {
   [ $DEBUG -ne 0 ] && \
-  echo `date +%Y%m%d-%H%M%S:` $@ >> $ERR
+  echo `date +%Y%m%d-%H%M%S:` "$@" >> $ERR
 }
 
 
 adb_list() {
   local DIR="$1"
-  [ -n "$DIR" ] || {
+#  [ -n "$DIR" ] || {
     DIR="/"
-  }
-
-if [ "$UPLOAD_BUSYBOX" = "yes" ]
-then
-  "$ADB" push "$BUSYBOX_ARMV5" "$BUSYBOX" 2>/dev/null
-  "$ADB" shell chmod 755 "$BUSYBOX"
-fi
-
-#"$ADB" shell "$BUSYBOX" ls --color=never -aelR "$DIR" | tr -d '\r' >adb.ls-lR
-
-# Caveat: We may not have "su" available and granted root access
-# Do not use "adb_cmd" here!
-# -n results in unknown UIDs and GIDs not to be mapped on user's values
-#"$ADB" shell "echo $BUSYBOX ls --color=never -aelR $DIR | su" \
-"$ADB" shell "echo $BUSYBOX ls --color=never -aelRn $DIR | su" \
-| tr -d '\r' \
-| tee $DBG \
-| {
+#  }
+  errprint adb shell ls -alRn $DIR
+  # redirect errors into list, or to /dev/null?
+  "$ADB" shell "\
+  find $DIR 2>/dev/null \
+  | egrep -v '^/(acct|charger|d|dev|proc|sys)/' \
+  | egrep -v '^/mnt/(androidwritable|installer|media_rw|pass_through|runtime|user)/' \
+  | egrep -v '^/(storage)/' \
+  | egrep -v '^/$' \
+  | sort \
+  | tr '\012' '\0' \
+  | xargs -0 ls -ldn \
+  " \
+  | tr -d '\r' \
+  | tee "$DBG" \
+  | \
+  {
     PREFIX="/"
     while read -ra ITEMS
     do
@@ -118,26 +112,31 @@ fi
           PREFIX="${PREFIX#/}" # Strip first "/"
         ;;
 
+	# /sdcard/TitaniumBackup:
+	# total 4488
+	# -rw-rw---- 1 0 9997     564 2022-04-03 18:28 nodomain.freeyourgadget.gadgetbridge-20220403-162824.properties
+	# -rw-rw---- 1 0 9997  616305 2022-04-03 18:28 nodomain.freeyourgadget.gadgetbridge-20220403-162824.tar.gz
+	# -rw-rw---- 1 0 9997 3971406 2022-04-03 18:28 nodomain.freeyourgadget.gadgetbridge-e8eb4222da2f61147da49edab69564f4.apk.gz
+	#     0      1 2  3      4         5       6     7
         # Dir
-        # drwxrwx--x    1 1000     1000         2048 Sun Dec 26 00:04:55 2010 data
+        # drwxrwx--x    1 1000     1000         2048 2020-10-10 00:04:55 data
         # File
-        # -rwxr-x---    1 0        0          103208 Thu Jan  1 00:00:00 1970 init
+        # -rwxr-x---    1 0        0          103208 1981-01-01 00:00:00 init
         # Symlink
-        # lrwxrwxrwx    1 0        0              11 Thu May 12 15:02:45 2011 etc -> /system/etc
+        # lrwxrwxrwx    1 0        0              11 1999-12-31 15:02:45 etc -> /system/etc
         d[rwxst-]????????|-[rwxst-]????????|l[rwxst-]????????)
           PERMISSIONS="${ITEMS[0]}"
-#          LINKS="${ITEMS[1]}"
+          LINKS="${ITEMS[1]}"
           OWNER="${ITEMS[2]}"
           GROUP="${ITEMS[3]}"
           SIZE="${ITEMS[4]}"
-#          WDAY="${ITEMS[5]}"
-          MONTH="${ITEMS[6]}"
-          DAY="${ITEMS[7]}"
-# get time at second precision
-#          TIME="${ITEMS[8]%:*}" # Strip last two digits: 00:00:00 -> 00:00
-          TIME="${ITEMS[8]}"
-          YEAR="${ITEMS[9]}"
-          FILE="${ITEMS[*]:10}"
+          YMD="${ITEMS[5]}"
+          YEAR=`echo ${YMD} | cut -d- -f1`
+          MONTH=`echo ${YMD} | cut -d- -f2`
+          DAY=`echo ${YMD} | cut -d- -f3`
+# get time at second precision?
+          TIME="${ITEMS[6]}"
+          FILE="${ITEMS[*]:7}"
 
 # "cannot read link" errors may come in two lines:
 # ls: /proc/1/cwd: cannot read link: Permission denied
@@ -184,19 +183,18 @@ fi
         # crw-rw----    1 1000     1005      10,  56 Thu May 12 15:02:45 2011 msm_pcm_in
         [cb][rwxst-]????????)
           PERMISSIONS="${ITEMS[0]}"
-#          LINKS="${ITEMS[1]}"
+          LINKS="${ITEMS[1]}"
           OWNER="${ITEMS[2]}"
           GROUP="${ITEMS[3]}"
           MAJOR="${ITEMS[4]%,}" # Strip trailing ","
           MINOR="${ITEMS[5]}"
-#          WDAY="${ITEMS[6]}"
-          MONTH="${ITEMS[7]}"
-          DAY="${ITEMS[8]}"
-# get time at second precision
-#          TIME="${ITEMS[9]%:*}" # Strip last two digits: 00:00:00 -> 00:00
-          TIME="${ITEMS[9]}"
-          YEAR="${ITEMS[10]}"
-          FILE="${ITEMS[*]:11}"
+          YMD="${ITEMS[6]}"
+          YEAR=`echo $YMD | cut -d- -f1`
+          MONTH=`echo $YMD | cut -d- -f2`
+          DAY=`echo $YMD | cut -d- -f3`
+# get time at second precision?
+          TIME="${ITEMS[7]}"
+          FILE="${ITEMS[*]:8}"
 
           case "$DAY" in
             [0-9]) DAY="0$DAY" ;;
@@ -276,108 +274,133 @@ fi
           esac
         ;;
 
-#        *)
-#          # Skip: empty lines and totals
-#        ;;
+        *)
+          # Skip: empty lines and totals
+        ;;
       esac
-    done
-  } | tee $OUT
-
+    done 
+  } \
+  | awk '{
+    if($8 !~ "^(acct|charger|d|dev|proc|sys)/"){
+      print;
+    }
+    }' \
+  | tee $OUT
 }
 
+# from phone to $TMPDIR
 adb_copyout() {
   FROM="$2"
   TO="$3"
-#  $ADB pull "$FROM" "$TO" &> /dev/null
-  $ADB shell "echo cat \"$FROM\" | su" > "$TO" 2> /dev/null
+  errprint adb pull -a /$FROM $TO
+  $ADB pull -a "/$FROM" "$TO" >&2 ##&> /dev/null
+  errprint returns $?
+# we must leave this here since it may be viewed, edited, ... later
 }
 
+# from $TMPDIR to phone
 adb_copyin() {
   TO="$2"
   FROM="$3"
-  $ADB push "$FROM" "$TO" &> /dev/null
-# there is no way to pipe stdin into adb shell :(
+  errprint adb push -a $FROM -\> /$TO
+  $ADB push -a "$FROM" "/$TO" >&2 #&> /dev/null
+  errprint returns $?
+# we are *probably* safe to remove the temp file?
+# temp file will be removed when vfs gets closed
+# this may be too late?
+  false && \
+  case "$FROM" in
+    ${TMPDIR}/extfs*)
+      rm -f "$FROM"
+      ;;
+  esac
 }
 
 adb_mkdir() {
   DIR="$2"
-  $ADB shell "echo mkdir -p \"$DIR\" | su" &> /dev/null
+  errprint adb shell mkdir -p /$DIR
+  $ADB shell mkdir -p "/$DIR" >&2 #&> /dev/null
 }
 
 adb_rmdir() {
   DIR="$2"
-#  $ADB shell rm -rf "$DIR" &> /dev/null
-  $ADB shell "echo rmdir \"$DIR\" | su" &> /dev/null
+  errprint adb shell rmdir /$DIR
+  $ADB shell rmdir "/$DIR" >&2 #&> /dev/null
 }
 
 adb_rm() {
   FILE="$2"
-#  $ADB shell rm -f "$FILE" &> /dev/null
-  $ADB shell "echo rm -f \"$FILE\" | su" &> /dev/null
+  errprint adb shell rm -f /$FILE
+  $ADB shell rm -f "/$FILE" >&2 #&> /dev/null
 }
 
 adb_cmd() {
-#  $ADB shell "$@" &> /dev/null
-  $ADB shell "echo \"$@\" | su" &> /dev/null
+  errprint adb shell $@
+  $ADB shell "$@" >&@ #&> /dev/null
 }
 
+##### MAIN CODE STARTS HERE #####
+
 # override any locale for dates
-LC_ALL=C
-export LC_ALL
+export LC_ALL=C
 
-ADB="${ADB:-`which adb`}"
-BUSYBOX="${BUSYBOX:-busybox}"
-SU=su
-
+ADB="${ADB:-`which 2>/dev/null adb`}"
 if [ -z "$ADB" ]; then
   echo "Error: could not find adb"
   exit 1
 fi
 
 ADB_STATE=`"$ADB" get-state | tail -n1`
+# should return "device"
 if [ "$ADB_STATE" != "device" ]; then
   "$ADB" kill-server > /dev/null 2>&1
   "$ADB" usb         > /dev/null 2>&1
 fi
-
+# should now return "device"
 ADB_STATE=`"$ADB" get-state | tail -n1`
 if [ "$ADB_STATE" != "device" ]; then
   echo "Error: adb cannot connect to device: $ADB_STATE"
   exit 1
 fi
+  "$ADB" usb         > /dev/null 2>&1
+  "$ADB" root        > /dev/null 2>&1
+  sleep 10
 
-# "which" may not exist at all - indicating missing busybox
-RBUSYBOX=`"$ADB" shell which "$BUSYBOX" | grep -v "not found"`
-if [ -z "$RBUSYBOX" ]; then
-  echo "Error: no $BUSYBOX on device"
-  exit 1
-fi
-
-# check whether there is su
-RSU=`"$ADB" shell which "$SU"`
-if [ -z "$RSU" ]; then
-  echo "Error: no $SU on device"
-  exit 1
-fi
-
-# check whether adb has been granted su
-RSU=`"$ADB" shell "echo ls -l /proc/1/cwd | su"`
-if [ -z "$RSU" ]; then
-  echo "Error: $SU access not granted on device"
-  exit 1
-fi
-
-errprint COMMAND \""$@"\"
+errprint CMD \""$@"\"
 COMMAND="$1"
 shift
 case "$COMMAND" in
-  list)    adb_list    "${1:-/}" ;;
-  copyout) adb_copyout "$@" ;;
-  copyin)  adb_copyin  "$@" ;;
+  # ToDo: detect root?
+  list)    adb_list    "${1:-$START}" ;; # there is no argument for list!!!
+  copyout) adb_copyout "$@" ;; # retval 1
+  copyin)  adb_copyin  "$@" ;; # retval 1
   mkdir)   adb_mkdir   "$@" ;;
   rmdir)   adb_rmdir   "$@" ;;
   rm)      adb_rm      "$@" ;;
   *)       echo "Error: unknown command $@"; exit 1 ;;
 esac
+RETVAL=$?
+errprint RET $RETVAL
+#echo $COMMAND operation returned $RETVAL >&2
 
-exit
+exit 0
+
+Some notes about MC operations:
+F2 - "Cannot execute commands on non-local filesystems"
+F3 - file:
+     copyout (to $TMPDIR), then view (showing path without leading /)
+     directory:
+     cd
+F4 - file:
+     copyout (to $TMPDIR), then edit
+     on save, file gets saved to $TMPDIR + copyin, then
+     Shift-F4! gets simulated, file already saved!
+     reason: retval != 0?
+     directory: no action
+F5 - copy to $TMPDIR (not preserving timestamp), copyin from there
+F6 - move to $TMPDIR (not preserving timestamp), copyin from there
+     cannot rename locally
+F7 - create (mkdir)
+F8 - delete recursively if not empty (rm, rmdir)
+
+cd adb://$tree will run a full "list" then change to $tree!

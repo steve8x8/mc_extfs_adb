@@ -80,14 +80,16 @@ errprint() {
 
 
 adb_list() {
-  local DIR="$1"
-#  [ -n "$DIR" ] || {
-    DIR="/"
-#  }
-  errprint adb shell ls -alRn $DIR
-  # redirect errors into list, or to /dev/null?
+  local DIRS="$@"
+  [ -n "$DIRS" ] || {
+    DIRS="/"
+  }
+  errprint list as user \"$("$ADB" shell id -un)\"
+  # -e doesn't exist (seen with LOS 18.1)
+  errprint adb shell ls -alRn $DIRS
+  # redirect errors to possibly process them
   "$ADB" shell "\
-  find $DIR 2>/dev/null \
+  find $DIRS 2>/dev/null \
   | egrep -v '^/(acct|charger|d|dev|proc|sys)/' \
   | egrep -v '^/mnt/(androidwritable|installer|media_rw|pass_through|runtime|user)/' \
   | egrep -v '^/(storage)/' \
@@ -98,44 +100,41 @@ adb_list() {
   " \
   | tr -d '\r' \
   | tee "$DBG" \
+  | grep -v '^total ' \
+  | grep -v '^$' \
   | \
   {
     PREFIX="/"
     while read -ra ITEMS
     do
-# possibly skip inaccessible stuff early
-#false && \
+# skip inaccessible stuff early
       case "${ITEMS[*]}" in
         *'Permission denied'*)
           errprint DENY ${ITEMS[*]}
           continue
           ;;
       esac
-# directory name can contain whitespace, don't probe for trailing colon
+      # /sdcard/TitaniumBackup:
+      # total 4488
+      # -rw-rw---- 1 0 9997     564 2022-04-03 18:28 nodomain.freeyourgadget.gadgetbridge-20220403-162824.properties
+      # -rw-rw---- 1 0 9997  616305 2022-04-03 18:28 nodomain.freeyourgadget.gadgetbridge-20220403-162824.tar.gz
+      # -rw-rw---- 1 0 9997 3971406 2022-04-03 18:28 nodomain.freeyourgadget.gadgetbridge-e8eb4222da2f61147da49edab69564f4.apk.gz
+      #     0      1 2  3      4         5       6     7
+      # Dir:
+      # drwxrwx--x    1 1000     1000         2048 2020-10-10 00:04:55 data
+      # File:
+      # -rwxr-x---    1 0        0          103208 1981-01-01 00:00:00 init
+      # Symlink:
+      # lrwxrwxrwx    1 0        0              11 1999-12-31 15:02:45 etc -> /system/etc
       case "${ITEMS[0]}" in
         # Dir entry:
         # /data/tombstones:
         '/'*)
-# use full line to include whitespace
-#          PREFIX="${ITEMS[0]%:}/" # Strip trailing ":", append '/'
           PREFIX="${ITEMS[*]:0}"
           PREFIX="${PREFIX%:}/" # Strip trailing ":", append '/'
-          PREFIX="${PREFIX/\/\///}" # Replace '//' by '/'
+          PREFIX="${PREFIX//\/\///}" # Replace all '//' by '/'
           PREFIX="${PREFIX#/}" # Strip first "/"
         ;;
-
-	# /sdcard/TitaniumBackup:
-	# total 4488
-	# -rw-rw---- 1 0 9997     564 2022-04-03 18:28 nodomain.freeyourgadget.gadgetbridge-20220403-162824.properties
-	# -rw-rw---- 1 0 9997  616305 2022-04-03 18:28 nodomain.freeyourgadget.gadgetbridge-20220403-162824.tar.gz
-	# -rw-rw---- 1 0 9997 3971406 2022-04-03 18:28 nodomain.freeyourgadget.gadgetbridge-e8eb4222da2f61147da49edab69564f4.apk.gz
-	#     0      1 2  3      4         5       6     7
-        # Dir
-        # drwxrwx--x    1 1000     1000         2048 2020-10-10 00:04:55 data
-        # File
-        # -rwxr-x---    1 0        0          103208 1981-01-01 00:00:00 init
-        # Symlink
-        # lrwxrwxrwx    1 0        0              11 1999-12-31 15:02:45 etc -> /system/etc
         d[rwxst-]????????|-[rwxst-]????????|l[rwxst-]????????)
           PERMISSIONS="${ITEMS[0]}"
           LINKS="${ITEMS[1]}"
@@ -149,7 +148,6 @@ adb_list() {
 # get time at second precision?
           TIME="${ITEMS[6]}"
           FILE="${ITEMS[*]:7}"
-
 # "cannot read link" errors may come in two lines:
 # ls: /proc/1/cwd: cannot read link: Permission denied
 # lrwxrwxrwx 1 root root 0 Sat Sep 19 13:34:01 2015 cwd
@@ -165,32 +163,8 @@ adb_list() {
               continue # Skip '.' and '..' directory entries
             ;;
           esac
-
-          case "$DAY" in
-            [0-9]) DAY="0$DAY" ;;
-          esac
-
-          case "$MONTH" in
-            [0-9]) MONTH="0$MONTH" ;;
-            [0-9][0-9]) ;; # MONTH="$MONTH" ;;
-            Jan) MONTH="01" ;;
-            Feb) MONTH="02" ;;
-            Mar) MONTH="03" ;;
-            Apr) MONTH="04" ;;
-            May) MONTH="05" ;;
-            Jun) MONTH="06" ;;
-            Jul) MONTH="07" ;;
-            Aug) MONTH="08" ;;
-            Sep) MONTH="09" ;;
-            Oct) MONTH="10" ;;
-            Nov) MONTH="11" ;;
-            Dec) MONTH="12" ;;
-            *) MONTH="01" ;;
-          esac
-
           echo "$PERMISSIONS 1 $OWNER $GROUP $SIZE $MONTH-$DAY-$YEAR $TIME $PREFIX$FILE"
         ;;
-
         # Device
         # crw-rw----    1 1000     1005      10,  56 Thu May 12 15:02:45 2011 msm_pcm_in
         [cb][rwxst-]????????)
@@ -207,41 +181,25 @@ adb_list() {
 # get time at second precision?
           TIME="${ITEMS[7]}"
           FILE="${ITEMS[*]:8}"
-
-          case "$DAY" in
-            [0-9]) DAY="0$DAY" ;;
-          esac
-
-          case "$MONTH" in
-            [0-9]) MONTH="0$MONTH" ;;
-            [0-9][0-9]) ;; # MONTH="$MONTH" ;;
-            Jan) MONTH="01" ;;
-            Feb) MONTH="02" ;;
-            Mar) MONTH="03" ;;
-            Apr) MONTH="04" ;;
-            May) MONTH="05" ;;
-            Jun) MONTH="06" ;;
-            Jul) MONTH="07" ;;
-            Aug) MONTH="08" ;;
-            Sep) MONTH="09" ;;
-            Oct) MONTH="10" ;;
-            Nov) MONTH="11" ;;
-            Dec) MONTH="12" ;;
-            *) MONTH="01" ;;
-          esac
-
           echo "$PERMISSIONS 1 $OWNER $GROUP $MAJOR, $MINOR $MONTH-$DAY-$YEAR $TIME $PREFIX$FILE"
         ;;
-
+        ?"?????????")
+          # "invisible" link/file/... (e.g., in /sys) - ignore
+        ;;
         # Handling of errors - This may be incomplete or even wrong!
-        # Insufficient permissions
+        # ls: /proc/100/exe: No such file or directory
         # ls: can't open '/data': Permission denied
-        # Disappeared during access
         # ls: /proc/20931/task/20931/fd/3: cannot read link: No such file or directory
         # Caveat:
         # If we don't *ignore* forbidden stuff here, it will be dup in the file display!
-        'ls:')
+        *)
+          # TEMP: show what's going on
+          errprint ERROR ${ITEMS[*]}
           case "${ITEMS[*]}" in
+          *'No such file or directory')
+            # system doesn't want to show us?
+            errprint GONE ${ITEMS[*]:1}
+            ;;
           *"can't open "*)
             WHY="${ITEMS[*]:4}"
             case "$WHY" in
@@ -285,12 +243,8 @@ adb_list() {
             ;;
           esac
         ;;
-
-        *)
-          # Skip: empty lines and totals
-        ;;
       esac
-    done 
+    done
   } \
   | awk '{
     if($8 !~ "^(acct|charger|d|dev|proc|sys)/"){
@@ -298,6 +252,7 @@ adb_list() {
     }
     }' \
   | tee $OUT
+  errprint list done
 }
 
 # from phone to $TMPDIR

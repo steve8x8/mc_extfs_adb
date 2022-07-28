@@ -64,7 +64,7 @@ esac
 
 # provide debugging output
 # (1=only errors, 2=also file list, 3: original ls output)
-DEBUG=${DEBUG:-0}
+DEBUG=${DEBUG:-1}
 ERR=/dev/null
 [ $DEBUG -ge 1 ] && ERR=${TMPDIR:-/tmp}/`basename "$0"`.err
 OUT=/dev/null
@@ -255,6 +255,7 @@ adb_copyout() {
   errprint adb pull -a /$FROM $TO
   $ADB pull -a "/$FROM" "$TO" &>/dev/null
   errprint returns $?
+  errprint `df -h $TMPDIR | tail -n1`
 # we must leave this here since it may be viewed, edited, ... later
 }
 
@@ -268,12 +269,13 @@ adb_copyin() {
 # we are *probably* safe to remove the temp file?
 # temp file will be removed when vfs gets closed
 # this may be too late?
-  false && \
+#  false && \
   case "$FROM" in
-    ${TMPDIR}/extfs*)
+    ${TMPDIR}/mc-`id -un`/extfs*)
       rm -f "$FROM"
       ;;
   esac
+  errprint `df -h $TMPDIR | tail -n1`
 }
 
 adb_mkdir() {

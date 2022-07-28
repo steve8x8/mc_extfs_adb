@@ -22,44 +22,56 @@
 #  MA 02110-1301, USA.
 
 
-# Modifications by steve8x8@googlemail.com, 2014--2015
+# Modifications by steve8x8@googlemail.com, 2014--2022
 # Use bash instead of sh (Debian has sh=dash),
-# at least "read -a" is a bashism...
-# Time stamps now correct to the second
+# since at least "read -a" is a bashism we can go for more of them.
+# Time stamps with minute precision only
 
 # the following environment variables may be defined:
-# $DEBUG
-# $ADB
+# $ADB   (default: `which adb`)
+# $DEBUG (default: 0)
+# $START (default: / - warning: this will take *very long*)
 
 # Known bugs:
-# - unable to set timestamp after write (mc doesn't provide one)
-# - no mapping of UIDs and GIDs (unknown ones get set to current user's)
-# - unreadable directories are shown as empty (or not at all)
-# - no automatic detection whether "su" has to be used
+# - timestamps wrong after write to phone (mc modifies during copy to $TMPDIR)
+# - no/incorrect mapping of UIDs and GIDs (unknown ones get set to current user's)
+# - unreadable directories are shown as empty (or not at all) - how to mark?
 
-# 2015-09-21: Merged some ideas from
+# 2015-09-21:
+# Merged some ideas from
 #  https://raw.githubusercontent.com/init6/init_6/master/app-misc/mc/files/mc-4.8.13-adb-extfs-adb-plugin.patch
-# 2022-07-21: Review for modern Android versions (tested with LOS 18.1, 14.1), drop busybox, escapes
-# note: intentional messages to stderr will be shown at the end of an operation only, making them pointless :(
+# 2022-07-22:
+# Review and partial rewrite for modern Android versions (tested with LOS 18.1, 14.1)
+# Drop busybox
+# Error handling
+# Possible root mode
+# ...
+# Developer's note:
+# Intentional messages to stderr will be shown at the end of an operation only, making them pointless :(
 
-# start directory
-START=/sdcard/Music
-START=/sdcard
-START=/
+# start directory - testing only
+#START=/sdcard/Music
+#START=/system
+#START=/proc
+#START=/data
+#START=/
 case $START in
+  "")	;;
   */)	;;
   *) START=${START}/
 	;;
 esac
+
 # provide debugging output
 # (1=only errors, 2=also file list, 3: original ls output)
-DEBUG=${DEBUG:-3}
+DEBUG=${DEBUG:-1}
 ERR=/dev/null
 [ $DEBUG -ge 1 ] && ERR=${TMPDIR:-/tmp}/`basename "$0"`.err
 OUT=/dev/null
 [ $DEBUG -ge 2 ] && OUT=${TMPDIR:-/tmp}/`basename "$0"`.out
 DBG=/dev/null
 [ $DEBUG -ge 3 ] && DBG=${TMPDIR:-/tmp}/`basename "$0"`.dbg
+
 
 errprint() {
   [ $DEBUG -ne 0 ] && \
@@ -350,37 +362,48 @@ if [ -z "$ADB" ]; then
   exit 1
 fi
 
-ADB_STATE=`"$ADB" get-state | tail -n1`
+ADB_STATE=`"$ADB" get-state 2>/dev/null | tail -n1`
+# should return "device", otherwise attempt to reset
+if [ "$ADB_STATE" != "device" ]; then
+  "$ADB" kill-server 2>&1
+fi
+# while we're at it, we can as well configure the connection
+# output will be presented as "errors"
+#"$ADB" usb    >&2
+#"$ADB" unroot >&2
+"$ADB" root   >&2
+# the operations above may take some time, grace time
+for second in `seq 10`
+do
+  sleep 1
+  ADB_STATE=`"$ADB" get-state 2>/dev/null | tail -n1`
+  if [ "$ADB_STATE" = "device" ]; then
+    break # we're there
+  fi
+done
+ADB_STATE=`"$ADB" get-state 2>/dev/null | tail -n1`
 # should return "device"
 if [ "$ADB_STATE" != "device" ]; then
-  "$ADB" kill-server > /dev/null 2>&1
-  "$ADB" usb         > /dev/null 2>&1
-fi
-# should now return "device"
-ADB_STATE=`"$ADB" get-state | tail -n1`
-if [ "$ADB_STATE" != "device" ]; then
-  echo "Error: adb cannot connect to device: $ADB_STATE"
+  "$ADB" get-state >&2
   exit 1
 fi
-  "$ADB" usb         > /dev/null 2>&1
-  "$ADB" root        > /dev/null 2>&1
-  sleep 10
 
 errprint CMD \""$@"\"
 COMMAND="$1"
 shift
 case "$COMMAND" in
-  # ToDo: detect root?
-  list)    adb_list    "${1:-$START}" ;; # there is no argument for list!!!
-  copyout) adb_copyout "$@" ;; # retval 1
-  copyin)  adb_copyin  "$@" ;; # retval 1
+  # ToDo: detect root, if detected, get full tree sans /dev, /proc, /sys (how?)
+  # There is no argument passed to "list".
+  # Get internal and external storage. Trailing slashes are essential!
+  list)    adb_list    "${START:-`adb shell 'ls 2>/dev/null -d /sdcard*/ /storage/????-????/' | xargs`}" ;;
+  copyout) adb_copyout "$@" ;;
+  copyin)  adb_copyin  "$@" ;;
   mkdir)   adb_mkdir   "$@" ;;
   rmdir)   adb_rmdir   "$@" ;;
   rm)      adb_rm      "$@" ;;
   *)       echo "Error: unknown command $@"; exit 1 ;;
 esac
-RETVAL=$?
-errprint RET $RETVAL
+# note: COMMAND may have returned retval != 0, seems to be harmless?
 #echo $COMMAND operation returned $RETVAL >&2
 
 exit 0
@@ -393,10 +416,9 @@ F3 - file:
      cd
 F4 - file:
      copyout (to $TMPDIR), then edit
-     on save, file gets saved to $TMPDIR + copyin, then
-     Shift-F4! gets simulated, file already saved!
-     reason: retval != 0?
-     directory: no action
+     on save, file gets saved to $TMPDIR + copyin
+     directory:
+     no action
 F5 - copy to $TMPDIR (not preserving timestamp), copyin from there
 F6 - move to $TMPDIR (not preserving timestamp), copyin from there
      cannot rename locally
